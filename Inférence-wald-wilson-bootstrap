@@ -1,0 +1,169 @@
+---
+title: "Intervalle_de_confiance EOLT"
+output: html_notebook
+---
+La première étape est de faire un test statistique pour voir si on peut rejeter
+l'hypothèse que le taux de sélection soit le même dans l'échantillon et la population. Pour un échantillon suffisament grand, cette hypothèse n'est pas invraissemblable.
+
+```{r}
+library(binom)
+EOLT <- read.csv("~/Rmarkdown/Slim fit project-Synthesis of jobs available to get selection rate - EOLT.csv", stringsAsFactors=FALSE)
+
+EOLT[1,30]='prop_observé'
+
+
+df<-data.frame(EOLT[[1]],EOLT[[2]],EOLT[[27]],EOLT[[28]],EOLT[[30]])
+
+
+pchap=(as.numeric(sub("%","",df[2:nrow(df),5])))/100
+pchap
+intervalle<-function(prm1,prm2,pchap){
+  rlt=binom.exact(x = prm1,n = prm2,conf.level = 0.95,"exact",p=pchap)
+  rlt
+}
+
+
+
+pourcentage<-function(float){
+  res = float * 100
+  res = paste(as.character(res),"%",sep = "")
+  res
+}
+```
+
+on va analyser l'hypothèse nulle pour chacune des lignes:
+```{r}
+v=binom.test(as.numeric(as.character(df[2,3])),as.numeric(as.character(df[2,4])),pchap[1])
+v
+```
+On voit que la p-valeur est significative dans le cas d'un risque d'erreur de 5% (p-valeur<5%). On peut conclure alors que l'on rejete l'hypothèse nulle (la proportion dans la population n'est pas égale à la proportion de l'echantillon).
+```{r}
+v=binom.test(as.numeric(as.character(df[3,3])),as.numeric(as.character(df[3,4])),pchap[2])
+v
+```
+Ici, on ne peut pas exclure l'hypothèse que la proportion soit la même au niveau de la population et de l'échantillon.
+
+
+On rajoute les intervalles de confiance à notre data frame. La méthode exacte peut être utiliser même si l'échantillon est petit. Du moment qu'il dépasse les 30 elements.
+
+```{r}
+#rajoute IC exact
+library(binom)
+# EOLT <- read.csv("~/Rmarkdown/Slim fit project-Synthesis of jobs available to get selection rate - EOLT.csv", stringsAsFactors=FALSE)
+# 
+# df<-data.frame(EOLT[[1]],EOLT[[2]],EOLT[[27]],EOLT[[28]],EOLT[[30]])
+# df
+
+#taux_ech = EOLT$SF.slim.Selection.rate.obtained
+
+
+
+#binom.exact(x = 1878,n = 2130,conf.level = 0.95,"exact")
+
+intervalle<-function(prm1,prm2,pchap){
+  rlt=binom.exact(x = prm1,n = prm2,conf.level = 0.95,"exact",p=pchap)
+  rlt
+}
+
+v=intervalle(as.numeric(as.character(df[2:nrow(df),3])),as.numeric(as.character(df[2:nrow(df),4])),as.numeric(as.character(df[2:nrow(df),5])))
+v
+IC_exa_binf=c("exact_lower",pourcentage(round(v$lower,4)))
+IC_exa_binf
+df <- data.frame(df,IC_exa_binf)
+IC_exa_bsup=c("exact_uper",pourcentage(round(v$upper,4)))
+IC_exa_bsup
+df <- data.frame(df,IC_exa_bsup)
+df
+
+```
+
+On utilisera ce code uniquement pour les échantillons qui dépassent 300 éléments. De préférence, l'algorithme est assez pertinent pour la prise de décision au delà de 1000 individus dans l'échantillons. Cette méthode est la méthode Classique pour un intervalle de confiance d'une proportion binomiale.
+On utilisera la méthode 'blaker', en résumé plus robuste que 'minlike' et 'centrale' 
+voir: https://www.rdocumentation.org/packages/exactci/versions/1.3-3/topics/binom.exact
+On utilisera la library(DescTools) pour ces methodes.
+```{r}
+#rajoute les IC de wilson
+library(DescTools)
+W=BinomCI (as.numeric(as.character(df[2:nrow(df),3])),as.numeric(as.character(df[2:nrow(df),4])),conf.level=0.95,method="wilson")
+
+IC_Wilson_binf = c("IC_wilson_binf",pourcentage(round(W[,2],4)))
+df<-data.frame(df,IC_Wilson_binf)
+IC_Wilson_bsup =c("IC_wilson_bsup",pourcentage(round(W[,3],4)))
+df<-data.frame(df,IC_Wilson_bsup)
+
+pourcentage(round(v$lower,4))
+```
+Nous ajoutons l'intervalle de wald, qu'on peut retrouver dans un de ces librairies:
+Pour un échantillon de taille dépassant mille, il peut être prise en compte pour la prise de décision:
+```{r}
+#rajoute IC de Wald
+pchap=(as.numeric(sub("%","",df[2:nrow(df),5])))/100
+pchap
+
+n=as.numeric(as.character(df[2:nrow(df),4]))
+n
+
+binf<-function(pchap,n){
+  
+  resl=pchap-2*sqrt(pchap*(1-pchap)/n)
+  resl
+}
+
+bsup<-function(pchap,n){
+  
+  resl=pchap+2*sqrt(pchap*(1-pchap)/n)
+  resl
+}
+
+IC_wald_binf =c("IC_wald_binf", pourcentage(round(binf(pchap,n),4)))
+IC_wald_bsup = c("IC_wald_bsup",pourcentage(round(bsup(pchap,n),4)))
+df = data.frame(df,IC_wald_binf)
+df = data.frame(df,IC_wald_bsup)
+df
+
+```
+```{r}
+EOLT[1,29]='Attendue'
+df = data.frame(df,EOLT[[29]])
+df <- data.frame(df,c("exa_mean",pourcentage(round(v$mean,4))))
+write.csv(df,file = "intervalle_confiance_EOLT.csv")
+```
+Ici on veut récupérer les estimations de la vraie proportion dans la population, et non l'intervalle. Cette méthode est issue de "binom.test"
+```{r}
+# estimation = vector("character",nrow(df))
+# for (i in 2:nrow(df)){
+#   estimation[i]=binom.test(as.numeric(as.character(df[i,3])),as.numeric(as.character(df[i,4])),pchap[2])
+#   
+# }
+v2=binom.test(as.numeric(as.character(df[2,3])),as.numeric(as.character(df[2,4])),pchap[1])
+v2$estimate
+v3=binom.test(as.numeric(as.character(df[3,3])),as.numeric(as.character(df[3,4])),pchap[2])
+v3$estimate
+v4=binom.test(as.numeric(as.character(df[4,3])),as.numeric(as.character(df[4,4])),pchap[3])
+v4$estimate
+v5=binom.test(as.numeric(as.character(df[5,3])),as.numeric(as.character(df[5,4])),pchap[4])
+v5$estimate
+v6=binom.test(as.numeric(as.character(df[6,3])),as.numeric(as.character(df[6,4])),pchap[5])
+v6$estimate
+v7=binom.test(as.numeric(as.character(df[7,3])),as.numeric(as.character(df[7,4])),pchap[6])
+v7$estimate
+v8=binom.test(as.numeric(as.character(df[8,3])),as.numeric(as.character(df[8,4])),pchap[7])
+v8$estimate
+v9=binom.test(as.numeric(as.character(df[9,3])),as.numeric(as.character(df[9,4])),pchap[8])
+v9$estimate
+v10=binom.test(as.numeric(as.character(df[10,3])),as.numeric(as.character(df[10,4])),pchap[9])
+v10$estimate
+estimation=c("Exact_forcast",pourcentage(round(v2$estimate,4)),pourcentage(round(v3$estimate,4)),pourcentage(round(v4$estimate,4)),pourcentage(round(v5$estimate,4)),pourcentage(round(v6$estimate,4)),pourcentage(round(v7$estimate,4)),pourcentage(round(v8$estimate,4)),pourcentage(round(v9$estimate,4)),pourcentage(round(v10$estimate,4)))
+estimation
+```
+on rajoute les estimations par méthode "exact" dans notre df et la colonne perte:
+```{r}
+df <- data.frame(df,estimation)
+pertes=as.numeric(sub("%","",df[2:nrow(df),12]))-as.numeric(sub("%","",df[2:nrow(df),14]))
+pertes=c("%_perte",pertes)
+pertes
+df <- data.frame(df,pertes)
+```
+
+On rappel que si"taux attendue - estimation"<0 cela se traduit comme des semi-finis slimfit qu'on aurait pu utiliser en plus. çàd que nous perdons de la matière en plus en utilisant des semi-finis de référence au lieu de ces slimfits.=> comptabiliser ce cout de matériaux supplémentaires. Pour faire ça grossièrement, on peut calculer(prix production SFr- prix production SFs).
+Dans le cas où "taux attendue - estimation">0, dans ce cas, on aurait produit plus de SF slimfit que nécessaire, qui ne sont pas adaptés. donc on perd des Semi-finis slimfits.
